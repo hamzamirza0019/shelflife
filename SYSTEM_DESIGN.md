@@ -23,20 +23,20 @@ A message queue can be added for non-critical asynchronous operations such as no
 
 ```mermaid
 flowchart LR
-    Client[React + TypeScript Client]
+    Client["React + TypeScript Client"]
 
-    CDN[CDN / Static Hosting]
-    LB[Load Balancer]
+    CDN["CDN / Static Hosting"]
+    LB["Load Balancer"]
 
-    API1[Express API 1]
-    API2[Express API 2]
-    APIN[Express API N]
+    API1["Express API 1"]
+    API2["Express API 2"]
+    APIN["Express API N"]
 
-    Redis[(Redis Cache)]
-    Mongo[(MongoDB Cluster)]
+    Redis[("Redis Cache")]
+    Mongo[("MongoDB Cluster")]
 
-    Queue[Message Queue]
-    Worker[Background Worker]
+    Queue["Message Queue"]
+    Worker["Background Worker"]
 
     Client --> CDN
     Client --> LB
