@@ -21,7 +21,7 @@ A message queue can be added for non-critical asynchronous operations such as no
 
 ### Architecture Diagram
 
-```mermaid
+```
 flowchart LR
     Client["React + TypeScript Client"]
 
