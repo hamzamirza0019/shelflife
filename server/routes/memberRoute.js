@@ -8,6 +8,8 @@ const router = express.Router();
 
 router.get("/", validate(validator.list), controller.listMembers);
 router.post("/", authenticate, requireRole("librarian"), validate(validator.create), controller.createMember);
+router.patch("/:id", authenticate, requireRole("librarian"), validate(validator.update), controller.updateMember);
+router.delete("/:id", authenticate, requireRole("librarian"), validate(validator.byId), controller.deleteMember);
 router.get("/:id/history", validate(validator.byId), controller.getMemberHistory);
 router.get("/:id", validate(validator.byId), controller.getMember);
 

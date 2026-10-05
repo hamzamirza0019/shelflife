@@ -3,6 +3,108 @@ const Book = require("../models/Book");
 const BorrowRecord = require("../models/BorrowRecord");
 const Member = require("../models/Member");
 
+function escapeRegex(value) {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function buildBorrowFilter(query, { currentOnly }) {
+	const clauses = [];
+	const now = new Date();
+
+	if (currentOnly) {
+		if (query.status === "overdue") {
+			clauses.push({
+				returnDate: null,
+				$or: [
+					{ status: "overdue" },
+					{ status: "issued", dueDate: { $lt: now } }
+				]
+			});
+		} else if (query.status === "issued") {
+			clauses.push({ returnDate: null, status: "issued", dueDate: { $gte: now } });
+		} else {
+			clauses.push({ returnDate: null, status: { $in: ["issued", "overdue"] } });
+		}
+	} else if (query.status === "overdue") {
+		clauses.push({
+			returnDate: null,
+			$or: [
+				{ status: "overdue" },
+				{ status: "issued", dueDate: { $lt: now } }
+			]
+		});
+	} else if (query.status === "issued") {
+		clauses.push({ returnDate: null, status: "issued", dueDate: { $gte: now } });
+	} else if (query.status) {
+		clauses.push({ status: query.status });
+	}
+
+	if (query.fromDate || query.toDate) {
+		const issueDate = {};
+		if (query.fromDate) issueDate.$gte = query.fromDate;
+		if (query.toDate) {
+			const toDate = new Date(query.toDate);
+			toDate.setUTCHours(23, 59, 59, 999);
+			issueDate.$lte = toDate;
+		}
+		clauses.push({ issueDate });
+	}
+
+	if (query.search) {
+		const search = new RegExp(escapeRegex(query.search), "i");
+		const [bookIds, memberIds] = await Promise.all([
+			Book.distinct("_id", { $or: [{ title: search }, { author: search }, { ISBN: search }] }),
+			Member.distinct("_id", { $or: [{ name: search }, { email: search }, { membershipId: search }] })
+		]);
+		const searchClauses = [{ book: { $in: bookIds } }, { member: { $in: memberIds } }];
+		if (mongoose.isValidObjectId(query.search)) searchClauses.push({ _id: query.search });
+		clauses.push({ $or: searchClauses });
+	}
+
+	if (clauses.length === 0) return {};
+	return clauses.length === 1 ? clauses[0] : { $and: clauses };
+}
+
+function deriveOverdueStatus(records) {
+	const now = new Date();
+	return records.map((record) => {
+		const data = record.toObject();
+		if (data.status === "issued" && !data.returnDate && data.dueDate < now) {
+			data.status = "overdue";
+		}
+		return data;
+	});
+}
+
+async function listBorrowingRecords(req, res, { currentOnly }) {
+	const { page, limit } = req.validatedQuery;
+	const filter = await buildBorrowFilter(req.validatedQuery, { currentOnly });
+	const [records, total] = await Promise.all([
+		BorrowRecord.find(filter)
+			.populate("book", "title author ISBN genre totalCopies availableCopies")
+			.populate("member", "name email membershipId")
+			.sort({ issueDate: -1, _id: -1 })
+			.skip((page - 1) * limit)
+			.limit(limit)
+			.exec(),
+		BorrowRecord.countDocuments(filter)
+	]);
+
+	return res.json({
+		success: true,
+		data: deriveOverdueStatus(records),
+		pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
+	});
+}
+
+async function listCurrentBorrowing(req, res) {
+	return listBorrowingRecords(req, res, { currentOnly: true });
+}
+
+async function listBorrowingHistory(req, res) {
+	return listBorrowingRecords(req, res, { currentOnly: false });
+}
+
 async function issueBook(req, res) {
 	const session = await mongoose.startSession();
 	let borrowRecord;
@@ -87,4 +189,4 @@ async function returnBook(req, res) {
 	}
 }
 
-module.exports = { issueBook, returnBook };
+module.exports = { listCurrentBorrowing, listBorrowingHistory, issueBook, returnBook };

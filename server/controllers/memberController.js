@@ -10,6 +10,29 @@ async function createMember(req, res) {
 	return res.status(201).json({ success: true, data: member });
 }
 
+async function updateMember(req, res) {
+	const member = await Member.findByIdAndUpdate(
+		req.params.id,
+		{ $set: req.body },
+		{ new: true, runValidators: true }
+	);
+	if (!member) return res.status(404).json({ success: false, message: "Member not found" });
+	return res.json({ success: true, data: member });
+}
+
+async function deleteMember(req, res) {
+	const member = await Member.findById(req.params.id);
+	if (!member) return res.status(404).json({ success: false, message: "Member not found" });
+
+	const hasBorrowingRecords = await BorrowRecord.exists({ member: member._id });
+	if (hasBorrowingRecords) {
+		return res.status(409).json({ success: false, message: "Cannot delete a member with borrowing history" });
+	}
+
+	await member.deleteOne();
+	return res.json({ success: true, data: { message: "Member deleted" } });
+}
+
 async function listMembers(req, res) {
 	const { page, limit, search } = req.validatedQuery;
 	const filter = search
@@ -53,4 +76,4 @@ async function getMemberHistory(req, res) {
 	return res.json({ success: true, data: history });
 }
 
-module.exports = { createMember, listMembers, getMember, getMemberHistory };
+module.exports = { createMember, updateMember, deleteMember, listMembers, getMember, getMemberHistory };
